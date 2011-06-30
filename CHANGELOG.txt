@@ -1,0 +1,28 @@
+
+## OpenLayers Proximity DRUPAL-6--2
+
+  2010-10-11 - Unit of measurement API change.
+               See openlayers_proximity_measurement_units()
+  2010-10-10 - Unit of measurement are now attached right after distance fields.
+               Make sure to remove any existing suffix value to avoid something
+               like "7.11 Kilometers km".
+  2010-07-28 - Introducing hook_build_proximity_index($node) 
+  2010-07-28 - #863386: Adding Rules integration (See README.txt). 
+  2010-07-28 - Adding support for proximity by node. 
+  2010-07-27 - Renaming Views filter from "Flat" to "Square". 
+  2010-07-27 - Exposing distance field to Views. 
+  2010-07-27 - It does not use MySQL views anymore: removing MySQL version
+               restrictions.
+  2010-07-26 - Adding Drush command to rebuild proximity index:
+               drush rebuild-proximity.
+  2010-07-26 - Adding Views sort handler (only works in combination of
+               "Great-circle" filters).
+  2010-07-26 - Now provides two separate filters: "Flat" and "Great-circle", 
+               previous handlers will be broken.
+  2010-07-26 - Introducing two search modes: "Flat" and "Great Circle"
+               (see README.txt).
+  2010-07-25 - #863402: by antoniodemarco: Add validation to exposed filter.
+
+## OpenLayers Proximity 6.x-2.x-dev, 2010-07-24
+
+  2010-07-24 - Initial commit.

@@ -1,0 +1,67 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the openlayers_proximity module.
+ *
+ */
+
+
+
+/**
+ * Implements hook_install().
+ */
+function openlayers_proximity_install() {
+}
+
+/**
+ * Implements hook_schema().
+ */
+function openlayers_proximity_schema() {
+  $schema['openlayers_proximity'] = array(
+    'description' => 'Storage  node geographical information.',
+    'fields' => array(
+      'nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The primary identifier for a node.',
+      ),
+      'lat' => array(
+        'type' => 'float',
+        'size' => 'big',
+        'not null' => FALSE,
+        'description' => 'Latitude.',
+      ),
+      'lon' => array(
+        'type' => 'float',
+        'size' => 'big',
+        'not null' => FALSE,
+        'description' => 'Longitude.',
+      ),
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'lat' => array('lat'),
+      'lon' => array('lon'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function openlayers_proximity_uninstall() {
+}
+
+/**
+ * Adding indexes to openlayers_proximity table.
+ */
+function openlayers_proximity_update_6201() {
+  $return = array();
+  db_add_index('openlayers_proximity', 'nid', array('nid'));
+  db_add_index('openlayers_proximity', 'lat', array('lat'));
+  db_add_index('openlayers_proximity', 'lon', array('lon'));
+  return t('Indexes Added to table: openlayers_proximity.');
+}

@@ -1,0 +1,40 @@
+<?php
+
+
+class OpenlayersProximityUnitTestCase extends DrupalWebTestCase {
+
+  var $wkt = 'GEOMETRYCOLLECTION(POINT(18.2979322 39.936438),LINESTRING(16.368649531098 44.998141956034,14.039547968691 46.197253674691,18.038571406031 46.288431811724,18.829587030999 45.246202958403,17.906735468537 44.904841009978),POLYGON((9.1176729688878 45.953371048009,6.0415010940103 45.277134747603,11.270993281301 44.436061237469,12.325680781259 46.22766322412,9.1176729688878 45.953371048009)),POINT(12.457516718753 43.614529997217),POINT(13.863766718697 42.360904810775),POINT(19.269040155981 43.23152302391),POINT(21.598141718388 44.436061237469))';
+
+  function getInfo() {
+    return array(
+      'name' => t('Business logic test'),
+      'description' => t('Business logic test.'),
+      'group' => t('Openlayers Proximity'),
+    );
+  }
+
+  function setUp() {
+    return;
+  }
+
+  function tearDown() {
+    return;
+  }
+
+  function testWktParsing() {
+    $points = openlayers_proximity_parse_wkt($this->wkt);
+    $this->assertEqual($points[2][0] == 14.039547968691, t('WKT parsing ok.'));
+  }
+
+  function testRuleInvokeNodeInsert() {
+    $node = node_load(3816);
+    $user = user_load($node->uid);
+
+    // rules_invoke_event('node_insert', $node, $user, $node, $user);
+  }
+
+}
+
+
+
+

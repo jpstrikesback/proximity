@@ -1,0 +1,20 @@
+
+name = OpenLayers Proximity
+description = Geographical proximity search for the OpenLayers module.
+core = 7.x
+package = OpenLayers
+dependencies[] = openlayers
+
+; Information added by drupal.org packaging script on 2011-02-25
+version = "7.x-2.x-dev"
+core = 7.x
+project = "openlayers_proximity"
+datestamp = "1298619834"
+
+
+files[] = tests/openlayers_proximity.test
+files[] = views/openlayers_proximity_handler_field.inc
+files[] = views/openlayers_proximity_handler_filter.inc
+files[] = views/openlayers_proximity_handler_filter_circle.inc
+files[] = views/openlayers_proximity_handler_filter_square.inc
+files[] = views/openlayers_proximity_handler_sort.inc

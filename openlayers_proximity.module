@@ -1,0 +1,424 @@
+<?php
+
+
+define('OPENLAYERS_PROXIMITY_NODES_PER_BATCH', 20); // Number of nodes to be processed for each batch.
+define('OPENLAYERS_PROXIMITY_FIELD_TYPE', 'geofield'); // WKT field type.
+define('OPENLAYERS_PROXIMITY_REGEX', '/(\-?\d*(\.\d*)?)\s(\-?\d*(\.\d*)?)/'); // Extract lat/lon from a WKT string.
+define('OPENLAYERS_PROXIMITY_DEGREE_TO_RADIANTS', 0.01745329252);
+define('OPENLAYERS_PROXIMITY_KM_PER_LAT', 111.321);
+define('OPENLAYERS_PROXIMITY_DEFAULT_UNIT', 'km');
+define('OPENLAYERS_PROXIMITY_GOOGLE_GEOCODER_URL', 'http://maps.google.com/maps/api/geocode/json?');
+define('OPENLAYERS_PROXIMITY_GOOGLE_STATUS_OK', 'OK');
+define('OPENLAYERS_PROXIMITY_SQL_GREAT_CIRCLE', '(6371.0 * ACOS(SIN((lat * RADIANS(1))) * SIN((:lat2 * RADIANS(1))) + COS((lat * RADIANS(1))) * COS((:lat2 * RADIANS(1))) * COS((lon * RADIANS(1)) - (:lon2 * RADIANS(1)))))');
+
+
+/**
+ * Implements hook_init().
+ */
+function openlayers_proximity_init() {
+  drupal_add_css(drupal_get_path('module', 'openlayers_proximity') . '/openlayers_proximity.css');
+}
+
+/**
+ * Implements hook_menu().
+ */
+function openlayers_proximity_menu() {
+  $items = array();
+  $items['admin/structure/openlayers/proximity'] = array(
+    'title' => 'Proximity Search',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('openlayers_proximity_settings'),
+    'access arguments' => array('administer openlayers'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 10,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function openlayers_proximity_node_update($node) {
+  if (TRUE || TRUE) {
+    openlayers_proximity_build_node_index($node);
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function openlayers_proximity_node_insert($node) {
+  if (TRUE || TRUE) {
+    openlayers_proximity_build_node_index($node);
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function openlayers_proximity_node_delete($node) {
+  if (TRUE) {
+    // TODO Please review the conversion of this statement to the D7 database API syntax.
+    /* db_query('DELETE FROM {openlayers_proximity} WHERE nid = %d', $node->nid) */
+    db_delete('openlayers_proximity')
+  ->condition('nid', $node->nid)
+  ->execute();
+  }
+}
+
+/**
+ * Implements hook_nodeapi().
+ */
+function openlayers_proximity_nodeapi_OLD(&$node, $op) { }
+
+/**
+ * Implements hook_views_api().
+ */
+function openlayers_proximity_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'openlayers_proximity') . '/views',
+  );
+}
+
+/**
+ * Implements hook_views_data().
+ */
+function openlayers_proximity_views_data() {
+
+  $data = array();
+  $data['openlayers_proximity']['table']['group'] = t('Proximity');
+  $data['openlayers_proximity']['table']['join'] = array(
+    'node' => array(
+      'type' => 'RIGHT',
+      'left_field' => 'nid',
+      'field' => 'nid',
+    ),
+  );
+  $data['openlayers_proximity']['flat'] = array(
+    'title' => t('Square'),
+    'help' => t('Gives locations contained within a square derived by a simple latitude/longitude comparison.'),
+    'filter' => array(
+      'handler' => 'openlayers_proximity_handler_filter_square',
+    ),
+  );
+  $data['openlayers_proximity']['circle'] = array(
+    'title' => t('Great-circle'),
+    'help' => t('Uses the Great-circle distance formula to return locations within a circular area.'),
+    'filter' => array(
+      'handler' => 'openlayers_proximity_handler_filter_circle',
+    ),
+  );
+  $data['openlayers_proximity']['distance'] = array(
+    'title' => t('Distance'),
+    'help' => t('Distance from a give point.'),
+    'sort' => array(
+      'handler' => 'openlayers_proximity_handler_sort',
+    ),
+    'field' => array(
+      'handler' => 'openlayers_proximity_handler_field',
+      'click sortable' => TRUE,
+    ),
+  );
+  return $data;
+}
+
+/**
+ * Menu callback.
+ */
+function openlayers_proximity_settings($form, &$form_state) {
+  $form = array();
+
+  $form['openlayers_proximity_unit'] = array(
+    '#title' => t('Unit of measurement'),
+    '#type' => 'select',
+    '#required' => TRUE,
+    '#options' => openlayers_proximity_get_available_units_for_select(),
+    '#default_value' => variable_get('openlayers_proximity_unit', OPENLAYERS_PROXIMITY_DEFAULT_UNIT),
+    '#description' => t('Select site wide unit of measurement.'),
+  );
+
+  $form['rebuild'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Rebuild Index'),
+    '#description' => t('Check and save configuration to rebuild proximity index.'),
+  );
+
+  $form['#submit'][] = 'openlayers_proximity_settings_submit';
+  $form = system_settings_form($form);
+
+  return $form;
+}
+
+/**
+ * Implementation of #submit callback.
+ */
+function openlayers_proximity_settings_submit(&$form, &$form_state) {
+  if ($form_state['values']['rebuild']) {
+    $batch = array(
+      'title' => t('Rebuild proximity index'),
+      'operations' => array(
+        array('openlayers_proximity_rebuild_index', array()),
+      ),
+      'finished' => 'openlayers_proximity_rebuild_index_finished',
+      'init_message' => t('The proximity index rebuilding process is beginning.'),
+      'error_message' => t('The proximity index rebuilding process encountered an error.'),
+    );
+    batch_set($batch);
+  }
+  unset($form_state['values']['rebuild']);
+}
+
+/**
+ * Batch API operation callback.
+ * TODO Sort out geofields atached to any entity (as well as 'node')
+ */
+function openlayers_proximity_rebuild_index(&$context) {
+
+  if (empty($context['sandbox'])) {
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['current_node'] = 0;
+    $context['sandbox']['types'] = module_invoke_all('openlayers_proximity_get_types');
+    $context['sandbox']['max'] = db_query("SELECT COUNT(DISTINCT nid) FROM {node} WHERE type IN (:types)", array(':types' => $context['sandbox']['types']))->fetchField();
+  }
+  $result = db_query_range("SELECT nid FROM {node} WHERE type IN (:types) AND nid > :cnode ORDER BY nid ASC", 0, OPENLAYERS_PROXIMITY_NODES_PER_BATCH, array(':types' => $context['sandbox']['types'], ':cnode' => $context['sandbox']['current_node']))->fetchAssoc();
+  foreach ($result as $nid) {
+    $node = node_load($nid);
+    $index = openlayers_proximity_build_node_index($node);
+    $context['results'][] = $node->nid . ' : ' . $node->title;
+    $context['sandbox']['progress']++;
+    $context['sandbox']['current_node'] = $node->nid;
+    $context['message'] = t('Rebuilding proximity index for !type !nid: <em>!title</em>. !count location(s) added.', array('!type' => $node->type, '!nid' => $node->nid, '!title' => $node->title, '!count' => count($index)));
+  }
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+}
+
+/**
+ * Barch API finished callback.
+ */
+function openlayers_proximity_rebuild_index_finished($success, $results, $operations) {
+  if ($success) {
+    $message = format_plural(count($results), 'Proximity index rebuilt for 1 node.', 'Proximity index rebuilt for @count nodes.');
+    drupal_set_message($message);
+  }
+  else {
+    // A fatal error occurred during batch processing.
+    $error_operation = reset($operations);
+    $operation = array_shift($error_operation);
+    $arguments = array_shift($error_operation);
+    $arguments_as_string = implode(', ', $arguments);
+
+    watchdog('openlayers_proximity', "Index rebuild: error when calling operation '%s'('%s')", array($operation, $arguments_as_string));
+    drupal_set_message(t('An error occurred and has been recorded in the system log.'), 'error');
+  }
+}
+
+/**
+ * Build proximity index for a given node.
+ */
+function openlayers_proximity_build_node_index($node) {
+
+  $index = module_invoke_all('build_proximity_index', $node);
+  drupal_alter('build_proximity_index', $node, $index);
+
+  db_delete('openlayers_proximity')
+  ->condition('nid', $node->nid)
+  ->execute();
+  $location->nid = $node->nid;
+  foreach ($index as $item) {
+    $location->lat = $item[0];
+    $location->lon = $item[1];
+    drupal_write_record('openlayers_proximity', $location);
+  }
+  return $index;
+}
+
+/**
+ * Implements hook_build_proximity_index().
+ */
+function openlayers_proximity_build_proximity_index($node) {
+  $index = array();
+  foreach (openlayers_proximity_get_wkt_fields($node->type) as $name => $field) {
+    $item = $node->{$name}['und'][0];
+    if (!module_invoke($field['module'], 'field_is_empty', $item, $field)) {
+      foreach (module_implements('parse_wkt') as $module) {
+        $index += module_invoke($module, 'parse_wkt', $item['wkt']);
+      }
+      drupal_alter('parse_wkt', $index, $field);
+    }
+  }
+  return $index;
+}
+
+/**
+ * Get WKT field for the specified content type
+ *
+ * @param $type Content type
+ */
+function openlayers_proximity_get_wkt_fields($type) {
+  static $fields = array();
+
+  if (!isset($fields[$type])) {
+    $everything = field_info_instances();
+    foreach ($everything as $entity => $bundles) {
+      foreach ($bundles as $bundle => $bundlefields) {
+        foreach ($bundlefields as $key => $field) {
+          $real_field = field_info_field($field['field_name']);    
+          if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
+            $fields[$type][$key] = $real_field;
+          }
+        }
+      }
+    }
+  }
+  return $fields[$type] ? $fields[$type] : array();
+}
+
+/**
+ * Implements hook_openlayers_proximity_get_types().
+ */
+function openlayers_proximity_openlayers_proximity_get_types() {
+  $types = array();
+  $fields = field_info_instances();
+  foreach ($fields as $entity => $bundles) {
+    foreach ($bundles as $bundle => $bundlefields) {    
+      foreach ($bundlefields as $field) {
+        $real_field = field_info_field($field['field_name']);    
+        if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
+          $types[$bundle] = $bundle;
+        }
+      }
+    }
+  }
+  return $types;
+}
+
+/**
+ * Implements hook_parse_wkt().
+ * Return array of lat/lon pairs.
+ */
+function openlayers_proximity_parse_wkt($wkt) {
+  $matches = array();
+  preg_match_all(OPENLAYERS_PROXIMITY_REGEX, $wkt, $matches);
+  $points = array();
+  foreach ($matches[0] as $wkt) {
+    if (strlen($wkt) > 1) {
+      $points[] = array_reverse(explode(' ', $wkt));
+    }
+  }
+  return $points;
+}
+
+/**
+ * Gets available unit of measurement.
+ */
+function openlayers_proximity_get_available_units() {
+  return module_invoke_all('measurement_units');
+}
+
+/**
+ * Gets available unit of measurement as select options.
+ */
+function openlayers_proximity_get_available_units_for_select() {
+  $units = array();
+  foreach (module_invoke_all('measurement_units') as $unit => $info) {
+    $units[$unit] = $info['long'];
+  }
+  return $units;
+}
+
+/**
+ * Implements hook_measurement_units().
+ *
+ * Expose available units of measurement. To perform conversion
+ * we must implement, for each unit, it respective:
+ * hook_measurement_units_convert_<UNIT>()
+ */
+function openlayers_proximity_measurement_units() {
+  return array(
+    'km' => array(
+      'long' => t('Kilometers'),
+      'short' => t('Km'),
+      'const' => 1,
+    ),
+    'miles' => array(
+      'long' => t('Miles'),
+      'short' => t('Mi'),
+      'const' => 1.609344,
+    ),
+  );
+}
+
+/**
+ * Conversion helper: convert from $unit to Kilometers.
+ */
+function openlayers_proximity_measurement_units_convert($unit, $value) {
+  $units = module_invoke_all('measurement_units');
+  if (isset($units[$unit]) && is_numeric($units[$unit]['const'])) {
+    return $value * $units[$unit]['const'];
+  }
+  return $value;
+}
+
+/**
+ * Conversion helper: convert from Kilometers to $unit.
+ */
+function openlayers_proximity_measurement_units_convert_back($unit, $value) {
+  $units = module_invoke_all('measurement_units');
+  if (isset($units[$unit]) && is_numeric($units[$unit]['const']) && $units[$unit]['const'] !== 0) {
+    return $value / $units[$unit]['const'];
+  }
+  return $value;
+}
+
+/**
+ * Query Google geocoding web service.
+ *
+ * @param $address Address or location name.
+ * @return Geocoder response.
+ */
+function openlayers_proximity_geocode($address) {
+
+  $locations = $args = array();
+  $args['address'] = str_replace(' ', '+', $address);
+  $language = language_default();
+  $args['language'] = $language->language;
+  $args['oe'] = 'utf-8';
+  $args['sensor'] = 'false';
+  $query = http_build_query($args, '', '&');
+
+  if (function_exists("curl_init")) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, OPENLAYERS_PROXIMITY_GOOGLE_GEOCODER_URL . $query);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    $result = curl_exec($ch);
+    curl_close($ch);
+  }
+  else {
+    $result = file_get_contents(OPENLAYERS_PROXIMITY_GOOGLE_GEOCODER_URL . $query);
+  }
+
+  $response = json_decode($result);
+
+  if ($response->status == OPENLAYERS_PROXIMITY_GOOGLE_STATUS_OK) {
+    foreach ($response->results as $result) {
+      $location = $components = array();
+      foreach ($result->address_components as $component) {
+        $key = $component->types[0];
+        $components[$key] = $component->long_name;
+        if ($key == 'country') {
+          $components['country_code'] = $component->short_name;
+        }
+      }
+      $components['street_address'] = $location['address'] = $result->formatted_address;
+      $location['components'] = $components;
+      $location['location'] = (array) $result->geometry->location;
+      $location['bounds'] = (array) $result->geometry->viewport;
+      $locations[] = $location;
+    }
+  }
+  return $locations;
+}
+
