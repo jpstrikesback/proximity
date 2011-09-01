@@ -234,8 +234,6 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
         $filter['value']['#size'] = 3;
         $filter['value']['#field_prefix'] = $force_operator ? $operators[$this->options['operator']] : '';
         $filter['value']['#field_suffix'] = $this->get_suffix();
-
-        $this->unset_attributes($filter['value'], array('#default_value'));
       }
 
       // Add meaningful prefix/suffix to min max.
