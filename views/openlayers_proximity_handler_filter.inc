@@ -334,12 +334,17 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
   }
 
   function secure_input() {
-    $this->value['value'] = isset($this->value['value']) ? $this->value['value'] : $this->options['value']['value'];
-    $this->value['min'] = isset($this->value['min']) ? $this->value['min'] : $this->options['value']['min'];
-    $this->value['max'] = isset($this->value['max']) ? $this->value['max'] : $this->options['value']['max'];
-    $this->value['node'] = isset($this->value[$this->options['expose']['node']]) ? $this->value[$this->options['expose']['node']] : $this->options['value']['node'];
-    $this->value['location'] = isset($this->value[$this->options['expose']['location']]) ? $this->value[$this->options['expose']['location']] : $this->options['value']['location'];
-    $this->value['unit'] = isset($this->value[$this->options['expose']['unit']]) ? $this->value[$this->options['expose']['unit']] : $this->options['value']['unit'];
+    // We must check numerical values--if blank string is present, use default
+    $this->value['value'] = (!empty($this->value[0]['value']) && $this->value[0]['value'] !== '') ?
+      $this->value[0]['value'] : $this->options['value']['value'];
+    $this->value['min'] = (!empty($this->value[0]['min']) && $this->value[0]['min'] !== '') ?
+      $this->value[0]['min'] : $this->options['value']['min'];
+    $this->value['max'] = (!empty($this->value[0]['max']) && $this->value[0]['max'] !== '') ?
+      $this->value[0]['max'] : $this->options['value']['max'];
+
+    $this->value['node'] = !empty($this->value[0][$this->options['expose']['node']]) ? $this->value[0][$this->options['expose']['node']] : $this->options['value']['node'];
+    $this->value['location'] = !empty($this->value[0][$this->options['expose']['location']]) ? $this->value[0][$this->options['expose']['location']] : $this->options['value']['location'];
+    $this->value['unit'] = !empty($this->value[0][$this->options['expose']['unit']]) ? $this->value[0][$this->options['expose']['unit']] : $this->options['value']['unit'];
 
     $this->value['value'] = openlayers_proximity_measurement_units_convert($this->value['unit'], $this->value['value']);
     $this->value['min'] = openlayers_proximity_measurement_units_convert($this->value['unit'], $this->value['min']);
@@ -429,5 +434,48 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     return t($suffix, array('@unit' => $units[$this->options['value']['unit']]['long'], '@location' => $this->location_name()));
   }
 
+  /**
+   * Do some minor translation of the exposed input
+   * Overridden
+   */
+  function accept_exposed_input($input) {
+    if (empty($this->options['exposed'])) {
+      return TRUE;
+    }
+
+    // rewrite the input value so that it's in the correct format so that
+    // the parent gets the right data.
+    if (!empty($this->options['expose']['identifier'])) {
+      $value = &$input[$this->options['expose']['identifier']];
+      if (!is_array($value)) {
+        $value = array(
+          'value' => $value,
+        );
+      }
+    }
+
+    parent::accept_exposed_input($input);
+
+    if (empty($this->options['expose']['required'])) {
+      // We have to do some of our own checking for non-required filters.
+      $info = $this->operators();
+      if (!empty($info[$this->operator]['values'])) {
+        switch ($info[$this->operator]['values']) {
+          case 1:
+            if ($value['value'] === '' && $value['location'] === '') {
+              return FALSE;
+            }
+            break;
+          case 2:
+            if ($value['min'] === '' && $value['max'] === '') {
+              return FALSE;
+            }
+            break;
+        }
+      }
+    }
+
+    return TRUE;
+  }
 
 }
