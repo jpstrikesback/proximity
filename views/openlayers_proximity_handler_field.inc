@@ -41,6 +41,12 @@ class openlayers_proximity_handler_field extends views_handler_field_numeric {
   }
 
   function render($values) {
+    // Don't cause notices and don't return '0.0 Mi' if we're drawing from
+    // an exposed filter and the form hasn't yet been submitted
+    if ($this->field_alias == 'unknown') {
+      return '';
+    }
+
     $value = $values->{$this->field_alias};
     $handler = $this->view->display_handler->get_handler('filter', $this->options['location_provider']);
     $unit = $handler->options['exposed'] ? $handler->value[$handler->options['expose']['unit']] : $handler->value['unit'];
