@@ -240,7 +240,7 @@ function openlayers_proximity_build_node_index($node) {
  */
 function openlayers_proximity_build_proximity_index($node) {
   $index = array();
-  foreach (openlayers_proximity_get_wkt_fields($node->type) as $name => $field) {
+  foreach (openlayers_proximity_get_wkt_fields($node) as $name => $field) {
     $item = $node->{$name}['und'][0];
     if (!module_invoke($field['module'], 'field_is_empty', $item, $field)) {
       foreach (module_implements('parse_wkt') as $module) {
@@ -257,8 +257,9 @@ function openlayers_proximity_build_proximity_index($node) {
  *
  * @param $type Content type
  */
-function openlayers_proximity_get_wkt_fields($type) {
+function openlayers_proximity_get_wkt_fields($node) {
   static $fields = array();
+  $type = $node->type;
 
   if (!isset($fields[$type])) {
     $everything = field_info_instances();
@@ -267,13 +268,21 @@ function openlayers_proximity_get_wkt_fields($type) {
         foreach ($bundlefields as $key => $field) {
           $real_field = field_info_field($field['field_name']);    
           if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
-            $fields[$type][$key] = $real_field;
+	        foreach ($real_field['bundles'] as $ent){
+		      if (in_array($type, $ent)) {
+	            $fields[$type][$key] = $real_field;
+		      }
+		    }
           }
         }
       }
     }
   }
-  return $fields[$type] ? $fields[$type] : array();
+  if (isset($fields[$type])) {
+	  return $fields[$type] ;
+  } else {
+	  return array();
+  }
 }
 
 /**
@@ -401,12 +410,16 @@ function openlayers_proximity_geocode($address) {
   }
 
   $response = json_decode($result);
-
   if ($response->status == OPENLAYERS_PROXIMITY_GOOGLE_STATUS_OK) {
     foreach ($response->results as $result) {
       $location = $components = array();
       foreach ($result->address_components as $component) {
-        $key = $component->types[0];
+		if (!empty($component->types[0])) {
+		  $key = $component->types[0];
+		}
+		else {
+		  $key = 'undefined';
+		}
         $components[$key] = $component->long_name;
         if ($key == 'country') {
           $components['country_code'] = $component->short_name;

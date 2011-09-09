@@ -41,7 +41,7 @@ class openlayers_proximity_handler_field extends views_handler_field_numeric {
   }
 
   function render($values) {
-    $value = $values->{$this->field_alias};
+    $value = $this->get_value($values);
     $handler = $this->view->display_handler->get_handler('filter', $this->options['location_provider']);
     $unit = $handler->options['exposed'] ? $handler->value[$handler->options['expose']['unit']] : $handler->value['unit'];
     $value = openlayers_proximity_measurement_units_convert_back($unit, $value);

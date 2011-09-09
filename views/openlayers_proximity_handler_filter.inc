@@ -4,7 +4,7 @@
 class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
 
   // exposed filter options
-  var $always_multiple = FALSE;
+  var $always_multiple = TRUE;
 
   function op_between($field) {
     $this->op_process('between', $field);
@@ -79,7 +79,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
   }
 
   /**
-   * Handle the 'left' side fo the exposed options form.
+   * Handle the 'left' side of the exposed options form.
    */
   function expose_form(&$form, &$form_state) {
     parent::expose_form($form, $form_state);
@@ -190,7 +190,6 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
         }
       }
 
-
       $this->unset_attributes($form, array('location_as'));
 
       // Turn exposed form into a fieldset to have better control over its rendering.
@@ -295,7 +294,6 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
         form_set_error($identifier . '][' . $location, t('Location not found'));
       }
     }
-
   }
 
   /**
