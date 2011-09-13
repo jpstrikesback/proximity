@@ -172,7 +172,14 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     if ($force_operator) {
       $operator = $this->options['expose']['operator'];
       $form[$operator]['#type'] = 'hidden';
-      $form[$operator]['#value'] = $form[$operator]['#default_value'];
+      $op = $form[$operator]['#value'] = $form[$operator]['#default_value'];
+      if (strstr($op, 'between')) {
+        unset($form[$this->options['expose']['identifier']]['value']);
+      }
+      else {
+        unset($form[$this->options['expose']['identifier']]['min']);
+        unset($form[$this->options['expose']['identifier']]['max']);
+      }
       $this->unset_attributes($form[$operator], array('#options'));
     }
 
@@ -259,11 +266,18 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
    */
   function exposed_validate(&$form, &$form_state) {
     parent::exposed_validate($form, $form_state);
-    // Satitize "value", "min" and "max"
+    // Sanitize "value", "min" and "max"
     $operators = $this->operators();
     $identifier = $this->options['expose']['identifier'];
     $location = $this->options['expose']['location'];
-    foreach (array('value', 'min', 'max') as $field) {
+    //$valuefields = array();
+	if (isset($form[$identifier]['value'])) {
+      $valuefields = array('value');
+	}
+    else {
+      $valuefields = array('min', 'max');
+    }
+    foreach ($valuefields as $field) {
       $form_state['values'][$identifier][$field] = str_replace(',', '.', $form_state['values'][$identifier][$field]);
     }
     $values = $form_state['values'];
