@@ -270,10 +270,9 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $operators = $this->operators();
     $identifier = $this->options['expose']['identifier'];
     $location = $this->options['expose']['location'];
-    //$valuefields = array();
-	if (isset($form[$identifier]['value'])) {
+    if (isset($form[$identifier]['value'])) {
       $valuefields = array('value');
-	}
+    }
     else {
       $valuefields = array('min', 'max');
     }
