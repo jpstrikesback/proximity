@@ -14,8 +14,8 @@ class openlayers_proximity_handler_filter_circle extends openlayers_proximity_ha
       $join = new views_join();
       $table = $this->table_formula_alias();
       $join->definition['table formula'] = $this->table_formula($this->value['lat'], $this->value['lon']);
-      $join->construct($table, 'node', 'nid', 'nid', array(), 'RIGHT');
-      $this->query->add_table($table, 'node', $join);
+      $join->construct($table, $this->entityInfo['base table'], $this->entityInfo['entity keys']['id'], 'id', array(), 'RIGHT');
+      $this->query->add_table($table, $this->entityInfo['base table'], $join);
       $this->query->add_field($table, 'distance');
 
       if ($op == 'simple') {
@@ -32,7 +32,7 @@ class openlayers_proximity_handler_filter_circle extends openlayers_proximity_ha
         }      
       }
     }
-    $this->query->add_groupby("nid");
+    $this->query->add_groupby($this->entityInfo['entity keys']['id']);
   }
 
   /**
@@ -47,7 +47,7 @@ class openlayers_proximity_handler_filter_circle extends openlayers_proximity_ha
     );
 
     $query = db_select('openlayers_proximity', 'op');
-    $query->fields('op', array('nid'));
+    $query->fields('op', array('id'));
     $query->fields('op', array('lat'));
     $query->fields('op', array('lon'));
     $query->addExpression(OPENLAYERS_PROXIMITY_SQL_GREAT_CIRCLE, 'distance', $args);

@@ -6,6 +6,21 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
   // exposed filter options
   var $always_multiple = TRUE;
 
+  var $entityInfo = '';
+
+  function init(&$view, &$options) {
+    parent::init($view, $options);
+    $entities = entity_get_info();
+    foreach ($entities as $entity)
+    {
+        if ($entity['base table'] == $this->view->base_table)
+        {
+            $this->entityInfo = $entity;
+            break;
+        }
+    }
+  }
+
   function op_between($field) {
     $this->op_process('between', $field);
   }
@@ -17,8 +32,8 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
   function op_process($op = 'simple', $field) {
 
     $this->secure_input();
-    if ($this->options['location_as'] == 'node') {
-      $this->process_node_proximity();
+    if ($this->options['location_as'] == 'entity') {
+      $this->process_entity_proximity();
     }
     if ($this->options['location_as'] == 'location') {
       $this->process_location_proximity();
@@ -53,14 +68,14 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
 
     $options['value']['contains']['unit'] = array('default' => variable_get('openlayers_proximity_unit', OPENLAYERS_PROXIMITY_DEFAULT_UNIT));
     $options['value']['contains']['location'] = array('default' => '');
-    $options['value']['contains']['node'] = array('default' => '');
+    $options['value']['contains']['entity'] = array('default' => '');
 
     $options['expose']['contains']['use_unit'] = array('default' => FALSE);
     $options['expose']['contains']['unit'] = array('default' => 'unit');
     $options['expose']['contains']['use_location'] = array('default' => FALSE);
     $options['expose']['contains']['location'] = array('default' => 'location');
-    $options['expose']['contains']['use_node'] = array('default' => FALSE);
-    $options['expose']['contains']['node'] = array('default' => 'node');
+    $options['expose']['contains']['use_entity'] = array('default' => FALSE);
+    $options['expose']['contains']['entity'] = array('default' => 'entity');
 
     return $options;
   }
@@ -74,8 +89,8 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $this->options['expose']['unit'] = 'unit';
     $this->options['expose']['use_location'] = FALSE;
     $this->options['expose']['location'] = 'location';
-    $this->options['expose']['use_node'] = FALSE;
-    $this->options['expose']['node'] = 'node';
+    $this->options['expose']['use_entity'] = FALSE;
+    $this->options['expose']['entity'] = 'entity';
   }
 
   /**
@@ -85,7 +100,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     parent::expose_form($form, $form_state);
     $this->expose_option_form($form, 'unit', 'unit of measurement');
     $this->expose_option_form($form, 'location', 'location');
-    $this->expose_option_form($form, 'node', 'node');
+    $this->expose_option_form($form, 'entity', $this->entityInfo['label']);
   }
 
   /**
@@ -112,14 +127,14 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
         'radio:options[location_as]' => array('location'),
       ),
     );
-    $form['value']['node'] = array(
-      '#title' => t('Node'),
+    $form['value']['entity'] = array(
+      '#title' => $this->entityInfo['label'],
       '#type' => 'select',
-      '#default_value' => $this->options['value']['node'],
-      '#options' => $this->get_node_options(),
-      '#description' => t('Node where to start to search from.'),
+      '#default_value' => $this->options['value']['entity'],
+      '#options' => $this->get_entity_options(),
+      '#description' => t('@entity where to start to search from.', array('@entity' => $this->entityInfo['label'])),
       '#dependency' => array(
-        'radio:options[location_as]' => array('node'),
+        'radio:options[location_as]' => array('entity'),
       ),
     );
     $form['value']['unit'] = array(
@@ -136,8 +151,8 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
       '#title' => t('Location'),
       '#default_value' => $this->options['location_as'],
       '#options' => array(
-        'location' => t('Get location from a string'),
-        'node' => t('Get location from a node'),
+        'location' => t('Get location from string'),
+        'entity' => t('Get location from @entity', array('@entity' => $this->entityInfo['label'])),
       ),
     );
   }
@@ -228,9 +243,9 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
       }
 
       if ($this->options['location_as'] == 'location') {
-        $this->unset_attributes($filter, array('node'));
+        $this->unset_attributes($filter, array('entity'));
       }
-      if ($this->options['location_as'] == 'node') {
+      if ($this->options['location_as'] == 'entity') {
         $this->unset_attributes($filter, array('location'));
       }
 
@@ -310,18 +325,18 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
   }
 
   /**
-   * Distance from a node: rough calculation of a centroid for the node in
+   * Distance from an entity: rough calculation of a centroid for the entity in
    * argument: centroid is calculate directly on values stored in the
    * proximity_index table.
    */
-  function process_node_proximity() {
-    $nid = $this->value['node'];
+  function process_entity_proximity() {
+    $id = $this->value['entity'];
 
     // Get square boundaries.
-    $x1 = db_query("SELECT lon FROM {openlayers_proximity} WHERE nid = :nid ORDER BY lon ASC LIMIT 0, 1", array(':nid' => $nid))->fetchField();
-    $y1 = db_query("SELECT lat FROM {openlayers_proximity} WHERE nid = :nid ORDER BY lat ASC LIMIT 0, 1", array(':nid' => $nid))->fetchField();
-    $x2 = db_query("SELECT lon FROM {openlayers_proximity} WHERE nid = :nid ORDER BY lon DESC LIMIT 0, 1", array(':nid' => $nid))->fetchField();
-    $y2 = db_query("SELECT lat FROM {openlayers_proximity} WHERE nid = :nid ORDER BY lat DESC LIMIT 0, 1", array(':nid' => $nid))->fetchField();
+    $x1 = db_query("SELECT lon FROM {openlayers_proximity} WHERE id = :id ORDER BY lon ASC LIMIT 0, 1", array(':id' => $id))->fetchField();
+    $y1 = db_query("SELECT lat FROM {openlayers_proximity} WHERE id = :id ORDER BY lat ASC LIMIT 0, 1", array(':id' => $id))->fetchField();
+    $x2 = db_query("SELECT lon FROM {openlayers_proximity} WHERE id = :id ORDER BY lon DESC LIMIT 0, 1", array(':id' => $id))->fetchField();
+    $y2 = db_query("SELECT lat FROM {openlayers_proximity} WHERE id = :id ORDER BY lat DESC LIMIT 0, 1", array(':id' => $id))->fetchField();
 
     $delta = (sqrt(pow($x1 - $x2, 2) + pow($y1 - $y2, 2)) / 2) * OPENLAYERS_PROXIMITY_KM_PER_LAT;
     $this->value['value'] += $delta;
@@ -329,7 +344,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $this->value['max'] += $delta;
     $this->value['lon'] = ($x1 + $x2) / 2;
     $this->value['lat'] = ($y1 + $y2) / 2;
-    drupal_alter('process_node_proximity', $this->value);
+    drupal_alter('process_entity_proximity', $this->value);
   }
 
   /**
@@ -348,7 +363,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $this->value['value'] = isset($this->value['value']) ? $this->value['value'] : $this->options['value']['value'];
     $this->value['min'] = isset($this->value['min']) ? $this->value['min'] : $this->options['value']['min'];
     $this->value['max'] = isset($this->value['max']) ? $this->value['max'] : $this->options['value']['max'];
-    $this->value['node'] = isset($this->value[$this->options['expose']['node']]) ? $this->value[$this->options['expose']['node']] : $this->options['value']['node'];
+    $this->value['entity'] = isset($this->value[$this->options['expose']['entity']]) ? $this->value[$this->options['expose']['entity']] : $this->options['value']['entity'];
     $this->value['location'] = isset($this->value[$this->options['expose']['location']]) ? $this->value[$this->options['expose']['location']] : $this->options['value']['location'];
     $this->value['unit'] = isset($this->value[$this->options['expose']['unit']]) ? $this->value[$this->options['expose']['unit']] : $this->options['value']['unit'];
 
@@ -404,25 +419,62 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     return !empty($this->options['expose']['use_' . $name]) && !empty($this->options['expose'][$name]);
   }
 
-  function get_node_options() {
+  function get_entity_options() {
     $options = array();
     // Avoid query if filter is not exposed. @TODO: get a better condition check.
-    if ($this->filter_item_is_exposed('node') && $this->options['location_as'] == 'node' || arg(2) == 'views') {
-      $results = db_query("SELECT n.title, n.nid FROM {openlayers_proximity} op LEFT JOIN {node} n ON n.nid = op.nid WHERE n.status = :nstatus ORDER BY n.title ASC", array(':nstatus' => 1))->fetchAllAssoc('nid');
+    if ($this->filter_item_is_exposed('entity') && $this->options['location_as'] == 'entity' || arg(2) == 'views') {
+      $base_table = $this->entityInfo['base table'];
+      $base_field = $this->entityInfo['entity keys']['id'];
+      $base_label = isset($this->entityInfo['entity keys']['label']) ? $this->entityInfo['entity keys']['label'] : '';
+      $loadEntity = $this->entityInfo['load hook'];
+      $labelEntity = $this->entityInfo['label callback'];
+      if (!empty($base_label))
+      {
+          $results = db_query("SELECT n.$base_label, n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus ORDER BY n.$base_label ASC", array(':nstatus' => 1))->fetchAllAssoc($base_field);
+      }
+      else
+      {
+          $results = db_query("SELECT n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus ORDER BY n.$base_field ASC", array(':nstatus' => 1))->fetchAllAssoc($base_field);
+      }
       foreach ($results as $row) {
-        $options[$row->nid] = check_plain(drupal_substr($row->title, 0, 40));
+        if (!empty($base_label))
+        {
+            $options[$row->{$base_field}] = check_plain(drupal_substr($row->{$base_label}, 0, 40));
+        }
+        else
+        {
+            $entityObject = $loadEntity($row->{$base_field});
+            $options[$row->{$base_field}] = check_plain(drupal_substr($labelEntity($entityObject), 0, 40));
+            unset($entityObject);
+        }
       }
     }
     return $options;
   }
 
   function location_name() {
+    $return = '';
     if ($this->options['location_as'] == 'location') {
-      return $this->options['value']['location'];
+        $return = $this->options['value']['location'];
     }
-    if ($this->options['location_as'] == 'node') {
-      return db_query("SELECT title FROM {node} WHERE nid = :nid", array(':nid' => $this->options['value']['node']))->fetchField();
+    if ($this->options['location_as'] == 'entity') {
+        $base_table = $this->entityInfo['base table'];
+        $base_field = $this->entityInfo['entity keys']['id'];
+        $base_label = isset($this->entityInfo['entity keys']['label']) ? $this->entityInfo['entity keys']['label'] : '';
+        $loadEntity = $this->entityInfo['load hook'];
+        $labelEntity = $this->entityInfo['label callback'];
+        if (!empty($base_label))
+        {
+            $return = db_query("SELECT $base_label FROM {" . $base_table . "} WHERE " . $base_field . " = :id", array(':id' => $this->options['value']['entity']))->fetchField();
+        }
+        else
+        {
+            $entityObject = $loadEntity($this->options['value']['entity']);
+            $return = check_plain(drupal_substr($labelEntity($entityObject), 0, 40));
+            unset($entityObject);
     }
+    }
+    return $return;
   }
 
   function get_suffix() {
