@@ -7,15 +7,17 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
   var $always_multiple = TRUE;
 
   var $entityInfo = '';
+  var $entityName = '';
 
   function init(&$view, &$options) {
     parent::init($view, $options);
     $entities = entity_get_info();
-    foreach ($entities as $entity)
+    foreach ($entities as $entityName => $entityInfo)
     {
-        if ($entity['base table'] == $this->view->base_table)
+        if ($entityInfo['base table'] == $this->view->base_table)
         {
-            $this->entityInfo = $entity;
+            $this->entityInfo = $entityInfo;
+            $this->entityName = $entityName;
             break;
         }
     }
@@ -333,10 +335,10 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $id = $this->value['entity'];
 
     // Get square boundaries.
-    $x1 = db_query("SELECT lon FROM {openlayers_proximity} WHERE id = :id ORDER BY lon ASC LIMIT 0, 1", array(':id' => $id))->fetchField();
-    $y1 = db_query("SELECT lat FROM {openlayers_proximity} WHERE id = :id ORDER BY lat ASC LIMIT 0, 1", array(':id' => $id))->fetchField();
-    $x2 = db_query("SELECT lon FROM {openlayers_proximity} WHERE id = :id ORDER BY lon DESC LIMIT 0, 1", array(':id' => $id))->fetchField();
-    $y2 = db_query("SELECT lat FROM {openlayers_proximity} WHERE id = :id ORDER BY lat DESC LIMIT 0, 1", array(':id' => $id))->fetchField();
+    $x1 = db_query("SELECT lon FROM {openlayers_proximity} WHERE id = :id AND entity = :entity ORDER BY lon ASC LIMIT 0, 1", array(':id' => $id, ':entity' => $this->entityName))->fetchField();
+    $y1 = db_query("SELECT lat FROM {openlayers_proximity} WHERE id = :id AND entity = :entity ORDER BY lat ASC LIMIT 0, 1", array(':id' => $id, ':entity' => $this->entityName))->fetchField();
+    $x2 = db_query("SELECT lon FROM {openlayers_proximity} WHERE id = :id AND entity = :entity ORDER BY lon DESC LIMIT 0, 1", array(':id' => $id, ':entity' => $this->entityName))->fetchField();
+    $y2 = db_query("SELECT lat FROM {openlayers_proximity} WHERE id = :id AND entity = :entity ORDER BY lat DESC LIMIT 0, 1", array(':id' => $id, ':entity' => $this->entityName))->fetchField();
 
     $delta = (sqrt(pow($x1 - $x2, 2) + pow($y1 - $y2, 2)) / 2) * OPENLAYERS_PROXIMITY_KM_PER_LAT;
     $this->value['value'] += $delta;
@@ -430,11 +432,11 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
       $labelEntity = $this->entityInfo['label callback'];
       if (!empty($base_label))
       {
-          $results = db_query("SELECT n.$base_label, n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus ORDER BY n.$base_label ASC", array(':nstatus' => 1))->fetchAllAssoc($base_field);
+          $results = db_query("SELECT n.$base_label, n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.$base_label ASC", array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
       }
       else
       {
-          $results = db_query("SELECT n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus ORDER BY n.$base_field ASC", array(':nstatus' => 1))->fetchAllAssoc($base_field);
+          $results = db_query("SELECT n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.$base_field ASC", array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
       }
       foreach ($results as $row) {
         if (!empty($base_label))

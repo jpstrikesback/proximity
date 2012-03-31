@@ -14,7 +14,7 @@ class openlayers_proximity_handler_filter_circle extends openlayers_proximity_ha
       $join = new views_join();
       $table = $this->table_formula_alias();
       $join->definition['table formula'] = $this->table_formula($this->value['lat'], $this->value['lon']);
-      $join->construct($table, $this->entityInfo['base table'], $this->entityInfo['entity keys']['id'], 'id', array(), 'RIGHT');
+      $join->construct($table, $this->entityInfo['base table'], $this->entityInfo['entity keys']['id'], 'id', array(array('field' => 'entity', 'value' => $this->entityName)), 'RIGHT');
       $this->query->add_table($table, $this->entityInfo['base table'], $join);
       $this->query->add_field($table, 'distance');
 
@@ -47,6 +47,7 @@ class openlayers_proximity_handler_filter_circle extends openlayers_proximity_ha
     );
 
     $query = db_select('openlayers_proximity', 'op');
+    $query->fields('op', array('entity'));
     $query->fields('op', array('id'));
     $query->fields('op', array('lat'));
     $query->fields('op', array('lon'));
