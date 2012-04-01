@@ -8,6 +8,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
 
   var $entityInfo = '';
   var $entityName = '';
+  var $hasArguments = false;
 
   function init(&$view, &$options) {
     parent::init($view, $options);
@@ -20,6 +21,10 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
             $this->entityName = $entityName;
             break;
         }
+    }
+    if (isset($this->view->display[$this->view->current_display]->handler->options['path']))
+    {
+        $this->hasArguments = true;
     }
   }
 
@@ -39,6 +44,9 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     }
     if ($this->options['location_as'] == 'location') {
       $this->process_location_proximity();
+    }
+    if ($this->options['location_as'] == 'argument') {
+      $this->process_argument_proximity();
     }
   }
 
@@ -71,6 +79,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $options['value']['contains']['unit'] = array('default' => variable_get('openlayers_proximity_unit', OPENLAYERS_PROXIMITY_DEFAULT_UNIT));
     $options['value']['contains']['location'] = array('default' => '');
     $options['value']['contains']['entity'] = array('default' => '');
+    $options['value']['contains']['argument'] = array('default' => '');
 
     $options['expose']['contains']['use_unit'] = array('default' => FALSE);
     $options['expose']['contains']['unit'] = array('default' => 'unit');
@@ -78,6 +87,8 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $options['expose']['contains']['location'] = array('default' => 'location');
     $options['expose']['contains']['use_entity'] = array('default' => FALSE);
     $options['expose']['contains']['entity'] = array('default' => 'entity');
+    $options['expose']['contains']['use_argument'] = array('default' => FALSE);
+    $options['expose']['contains']['argument'] = array('default' => 'argument');
 
     return $options;
   }
@@ -93,6 +104,8 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $this->options['expose']['location'] = 'location';
     $this->options['expose']['use_entity'] = FALSE;
     $this->options['expose']['entity'] = 'entity';
+    $this->options['expose']['use_argument'] = FALSE;
+    $this->options['expose']['argument'] = 'argument';
   }
 
   /**
@@ -103,6 +116,10 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     $this->expose_option_form($form, 'unit', 'unit of measurement');
     $this->expose_option_form($form, 'location', 'location');
     $this->expose_option_form($form, 'entity', $this->entityInfo['label']);
+    if ($this->hasArguments)
+    {
+        $this->expose_option_form($form, 'argument', 'argument');
+    }
   }
 
   /**
@@ -139,6 +156,16 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
         'radio:options[location_as]' => array('entity'),
       ),
     );
+    $form['value']['argument'] = array(
+      '#title' => t('Argument'),
+      '#type' => 'select',
+      '#default_value' => '',
+      '#options' => $this->get_argument_options(),
+      '#description' => t('Argument in path containing @entity id where to start to search from.', array('@entity' => $this->entityInfo['label'])),
+      '#dependency' => array(
+        'radio:options[location_as]' => array('argument'),
+      ),
+    );
     $form['value']['unit'] = array(
       '#title' => t('Unit of measurement'),
       '#type' => 'select',
@@ -148,14 +175,19 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
       '#prefix' => '<div class="views-left-30">',
       '#suffix' => '</div>',
     );
+    $location_as_options = array(
+        'location' => t('Get location from string'),
+        'entity' => t('Get location from @entity', array('@entity' => $this->entityInfo['label'])),
+    );
+    if ($this->hasArguments)
+    {
+        $location_as_options['argument'] = t('Get location from argument in path');
+    }
     $form['location_as'] = array(
       '#type' => 'radios',
       '#title' => t('Location'),
       '#default_value' => $this->options['location_as'],
-      '#options' => array(
-        'location' => t('Get location from string'),
-        'entity' => t('Get location from @entity', array('@entity' => $this->entityInfo['label'])),
-      ),
+      '#options' => $location_as_options,
     );
   }
 
@@ -246,9 +278,15 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
 
       if ($this->options['location_as'] == 'location') {
         $this->unset_attributes($filter, array('entity'));
+        $this->unset_attributes($filter, array('argument'));
       }
       if ($this->options['location_as'] == 'entity') {
         $this->unset_attributes($filter, array('location'));
+        $this->unset_attributes($filter, array('argument'));
+      }
+      if ($this->options['location_as'] == 'argument') {
+        $this->unset_attributes($filter, array('location'));
+        $this->unset_attributes($filter, array('entity'));
       }
 
       // Add meaningful suffix to value.
@@ -324,6 +362,9 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
         form_set_error($identifier . '][' . $location, t('Location not found'));
       }
     }
+
+    // @todo: validate entity
+    // @todo: validate argument
   }
 
   /**
@@ -332,7 +373,39 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
    * proximity_index table.
    */
   function process_entity_proximity() {
-    $id = $this->value['entity'];
+    $this->value['lat'] = $this->value['lon'] = NULL;
+    $this->process_proximity_by_id($this->value['entity']);
+  }
+
+  /**
+   * Distance from a location: query is a string and it will be geolocated.
+   */
+  function process_location_proximity() {
+    $this->value['lat'] = $this->value['lon'] = NULL;
+    if ($this->response = openlayers_proximity_geocode($this->value['location'])) {
+      $this->value['lat']  = $this->response[0]['location']['lat'];
+      $this->value['lon']  = $this->response[0]['location']['lng'];
+    }
+    drupal_alter('process_location_proximity', $this->value);
+  }
+
+  /**
+   * Distance from an argument in the url
+   */
+  function process_argument_proximity() {
+    $this->value['lat'] = $this->value['lon'] = NULL;
+    if (isset($this->view->args[$this->value['argument']]))
+    {
+        $id = $this->view->args[$this->value['argument']];
+        if ((string)$id == (string)(int)$id)
+        {
+            $id = $this->view->args[$this->value['argument']];
+            $this->process_proximity_by_id($id);
+        }
+    }
+  }
+
+  function process_proximity_by_id($id) {
 
     // Get square boundaries.
     $x1 = db_query("SELECT lon FROM {openlayers_proximity} WHERE id = :id AND entity = :entity ORDER BY lon ASC LIMIT 0, 1", array(':id' => $id, ':entity' => $this->entityName))->fetchField();
@@ -349,24 +422,13 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     drupal_alter('process_entity_proximity', $this->value);
   }
 
-  /**
-   * Distance from a location: query is a string and it will be geolocated.
-   */
-  function process_location_proximity() {
-    $this->value['lat'] = $this->value['lon'] = NULL;
-    if ($this->response = openlayers_proximity_geocode($this->value['location'])) {
-      $this->value['lat']  = $this->response[0]['location']['lat'];
-      $this->value['lon']  = $this->response[0]['location']['lng'];
-    }
-    drupal_alter('process_location_proximity', $this->value);
-  }
-
   function secure_input() {
     $this->value['value'] = isset($this->value['value']) ? $this->value['value'] : $this->options['value']['value'];
     $this->value['min'] = isset($this->value['min']) ? $this->value['min'] : $this->options['value']['min'];
     $this->value['max'] = isset($this->value['max']) ? $this->value['max'] : $this->options['value']['max'];
     $this->value['entity'] = isset($this->value[$this->options['expose']['entity']]) ? $this->value[$this->options['expose']['entity']] : $this->options['value']['entity'];
     $this->value['location'] = isset($this->value[$this->options['expose']['location']]) ? $this->value[$this->options['expose']['location']] : $this->options['value']['location'];
+    $this->value['argument'] = isset($this->value[$this->options['expose']['argument']]) ? $this->value[$this->options['expose']['argument']] : $this->options['value']['argument'];
     $this->value['unit'] = isset($this->value[$this->options['expose']['unit']]) ? $this->value[$this->options['expose']['unit']] : $this->options['value']['unit'];
 
     $this->value['value'] = openlayers_proximity_measurement_units_convert($this->value['unit'], $this->value['value']);
@@ -454,6 +516,18 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
     return $options;
   }
 
+  function get_argument_options()
+  {
+      $options = array();
+      $path = $this->view->display[$this->view->current_display]->handler->options['path'];
+      $argCount = substr_count($path, '%');
+      for ($i = 0; $i < $argCount; $i++)
+      {
+          $options[$i] = t('Argument @id', array('@id' => $i));
+      }
+      return $options;
+  }
+
   function location_name() {
     $return = '';
     if ($this->options['location_as'] == 'location') {
@@ -475,6 +549,10 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
             $return = check_plain(drupal_substr($labelEntity($entityObject), 0, 40));
             unset($entityObject);
     }
+    }
+    if ($this->options['location_as'] == 'argument') {
+        // @todo: use better location_name()
+        $return = 'argument';
     }
     return $return;
   }
