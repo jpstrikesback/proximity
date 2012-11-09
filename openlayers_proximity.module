@@ -229,20 +229,23 @@ function openlayers_proximity_rebuild_index($entity, $bundles, &$context)
         $context['sandbox']['bundles'] = $bundles;
         $context['sandbox']['max'] = 0;
 
-        $query = "SELECT COUNT(DISTINCT " . $entityInfo['entity keys']['id'] . ") FROM {" . $entityInfo['base table'] . "}";
+        $arguments = array();
+        $query = 'SELECT COUNT(DISTINCT ' . db_escape_field($entityInfo['entity keys']['id']) . ') FROM {' . db_escape_table($entityInfo['base table']) . '}';
         if (isset($entityInfo['entity keys']['bundle']) && !empty($entityInfo['entity keys']['bundle']))
         {
-            $query .= sprintf(" WHERE %s IN (%s)", $entityInfo['entity keys']['bundle'], "'" . implode("', '", $bundles) . "'");
+            $query .= ' WHERE ' . db_escape_field($entityInfo['entity keys']['bundle']) . ' IN (:bundles)';
+            $arguments = array(':bundles' => $bundles);
         }
-        $context['sandbox']['max'] = db_query($query)->fetchField();
+        $context['sandbox']['max'] = db_query($query, $arguments)->fetchField();
     }
     $arguments = array(':cnode' => $context['sandbox']['current_id']);
-    $query = "SELECT " . $entityInfo['entity keys']['id'] . " as id FROM {" . $entityInfo['base table'] . "} WHERE " . $entityInfo['entity keys']['id'] . " > :cnode";
+    $query = 'SELECT ' . db_escape_field($entityInfo['entity keys']['id']) . ' AS id FROM {' . db_escape_table($entityInfo['base table']) . '} WHERE ' . db_escape_field($entityInfo['entity keys']['id']) . ' > :cnode';
     if (isset($entityInfo['entity keys']['bundle']) && !empty($entityInfo['entity keys']['bundle']))
     {
-        $query .= sprintf(' AND %s IN (%s)', $entityInfo['entity keys']['bundle'], "'" . implode("', '", $bundles) . "'");
+      $arguments[':bundles'] = $bundles;
+      $query .= ' AND ' . db_escape_field($entityInfo['entity keys']['bundle']) . ' IN (:bundles)';
     }
-    $query .= " ORDER BY " . $entityInfo['entity keys']['id'] . " ASC";
+    $query .= ' ORDER BY ' . db_escape_field($entityInfo['entity keys']['id']) . ' ASC';
     $result = db_query_range($query, 0, OPENLAYERS_PROXIMITY_NODES_PER_BATCH, $arguments)->fetchAssoc();
     if (is_array($result))
     {
@@ -354,7 +357,7 @@ function openlayers_proximity_get_wkt_fields ($entityObject, $entityName = 'node
     foreach ($everything as $entity => $bundles) {
       foreach ($bundles as $bundle => $bundlefields) {
         foreach ($bundlefields as $key => $field) {
-          $real_field = field_info_field($field['field_name']);    
+          $real_field = field_info_field($field['field_name']);
           if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
 	        foreach ($real_field['bundles'] as $bndl){
 		      if (in_array($type, $bndl)) {
@@ -380,9 +383,9 @@ function openlayers_proximity_openlayers_proximity_get_types() {
   $types = array();
   $fields = field_info_instances();
   foreach ($fields as $entity => $bundles) {
-    foreach ($bundles as $bundle => $bundlefields) {    
+    foreach ($bundles as $bundle => $bundlefields) {
       foreach ($bundlefields as $field) {
-        $real_field = field_info_field($field['field_name']);    
+        $real_field = field_info_field($field['field_name']);
         if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
           $types[$bundle] = $bundle;
         }

@@ -494,11 +494,11 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
       $labelEntity = $this->entityInfo['label callback'];
       if (!empty($base_label))
       {
-          $results = db_query("SELECT n.$base_label, n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.$base_label ASC", array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
+          $results = db_query('SELECT n.' . db_escape_field($base_label) . ', n.' . db_escape_field($base_field) . ' FROM {openlayers_proximity} op LEFT JOIN {' . db_escape_table($base_table) . '} n ON n.' . db_escape_field($base_field) . ' = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.' . db_escape_field($base_label) . ' ASC', array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
       }
       else
       {
-          $results = db_query("SELECT n." . $base_field . " FROM {openlayers_proximity} op LEFT JOIN {" . $base_table . "} n ON n." . $base_field . " = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.$base_field ASC", array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
+          $results = db_query('SELECT n.' . db_escape_field($base_field) . ' FROM {openlayers_proximity} op LEFT JOIN {' . db_escape_table($base_table) . '} n ON n.' . db_escape_field($base_field) . ' = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.$base_field ASC', array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
       }
       foreach ($results as $row) {
         if (!empty($base_label))
@@ -541,7 +541,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
         $labelEntity = $this->entityInfo['label callback'];
         if (!empty($base_label))
         {
-            $return = db_query("SELECT $base_label FROM {" . $base_table . "} WHERE " . $base_field . " = :id", array(':id' => $this->options['value']['entity']))->fetchField();
+            $return = db_query('SELECT ' . db_escape_field($base_label) . ' FROM {' . db_escape_table($base_table) . '} WHERE ' . db_escape_field($base_field) . ' = :id', array(':id' => $this->options['value']['entity']))->fetchField();
         }
         else
         {
