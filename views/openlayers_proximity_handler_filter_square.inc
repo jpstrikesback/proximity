@@ -40,7 +40,7 @@ class openlayers_proximity_handler_filter_square extends openlayers_proximity_ha
 
       $this->query->add_where_expression($this->options['group'], $where);
     }
-    $this->query->add_groupby("nid");
+    $this->query->add_groupby('id');
   }
 
 

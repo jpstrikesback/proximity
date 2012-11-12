@@ -18,14 +18,20 @@ function openlayers_proximity_install() {
  */
 function openlayers_proximity_schema() {
   $schema['openlayers_proximity'] = array(
-    'description' => 'Storage  node geographical information.',
+    'description' => 'Storage of entity geographical information.',
     'fields' => array(
-      'nid' => array(
+      'entity' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Name of entity.',
+      ),
+      'id' => array(
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'The primary identifier for a node.',
+        'description' => 'The primary identifier for an entity.',
       ),
       'lat' => array(
         'type' => 'float',
@@ -41,10 +47,12 @@ function openlayers_proximity_schema() {
       ),
     ),
     'indexes' => array(
-      'nid' => array('nid'),
+      'entity' => array('entity'),
+      'id' => array('id'),
       'lat' => array('lat'),
       'lon' => array('lon'),
     ),
+    'primary key' => array('entity', 'id'),
   );
   return $schema;
 }
@@ -58,10 +66,10 @@ function openlayers_proximity_uninstall() {
 /**
  * Adding indexes to openlayers_proximity table.
  */
-function openlayers_proximity_update_6201() {
+/* function openlayers_proximity_update_6201() {
   $return = array();
   db_add_index('openlayers_proximity', 'nid', array('nid'));
   db_add_index('openlayers_proximity', 'lat', array('lat'));
   db_add_index('openlayers_proximity', 'lon', array('lon'));
   return t('Indexes Added to table: openlayers_proximity.');
-}
+} */

@@ -40,7 +40,16 @@ function openlayers_proximity_menu() {
  */
 function openlayers_proximity_node_update($node) {
   if (TRUE || TRUE) {
-    openlayers_proximity_build_node_index($node);
+    openlayers_proximity_build_entity_index($node);
+  }
+}
+
+/**
+ * Implements hook_user_update().
+ */
+function openlayers_proximity_user_update(&$edit, $account, $category) {
+  if (TRUE || TRUE) {
+    openlayers_proximity_build_entity_index($account, 'user');
   }
 }
 
@@ -49,7 +58,16 @@ function openlayers_proximity_node_update($node) {
  */
 function openlayers_proximity_node_insert($node) {
   if (TRUE || TRUE) {
-    openlayers_proximity_build_node_index($node);
+    openlayers_proximity_build_entity_index($node);
+  }
+}
+
+/**
+ * Implements hook_user_insert().
+ */
+function openlayers_proximity_user_insert(&$edit, $account, $category) {
+  if (TRUE || TRUE) {
+    openlayers_proximity_build_entity_index($account, 'user');
   }
 }
 
@@ -61,7 +79,22 @@ function openlayers_proximity_node_delete($node) {
     // TODO Please review the conversion of this statement to the D7 database API syntax.
     /* db_query('DELETE FROM {openlayers_proximity} WHERE nid = %d', $node->nid) */
     db_delete('openlayers_proximity')
-  ->condition('nid', $node->nid)
+  ->condition('entity', 'node')
+  ->condition('id', $node->nid)
+  ->execute();
+  }
+}
+
+/**
+ * Implements hook_user_delete().
+ */
+function openlayers_proximity_user_delete($account) {
+  if (TRUE) {
+    // TODO Please review the conversion of this statement to the D7 database API syntax.
+    /* db_query('DELETE FROM {openlayers_proximity} WHERE nid = %d', $node->nid) */
+    db_delete('openlayers_proximity')
+  ->condition('entity', 'user')
+  ->condition('id', $account->uid)
   ->execute();
   }
 }
@@ -92,7 +125,12 @@ function openlayers_proximity_views_data() {
     'node' => array(
       'type' => 'RIGHT',
       'left_field' => 'nid',
-      'field' => 'nid',
+      'field' => 'id'
+    ),
+    'users' => array(
+      'type' => 'RIGHT',
+      'left_field' => 'uid',
+      'field' => 'id',
     ),
   );
   $data['openlayers_proximity']['flat'] = array(
@@ -155,52 +193,86 @@ function openlayers_proximity_settings($form, &$form_state) {
  */
 function openlayers_proximity_settings_submit(&$form, &$form_state) {
   if ($form_state['values']['rebuild']) {
+        $entityInfo = openlayers_proximity_get_entity_info();
+        if (count($entityInfo) > 0)
+        {
+            $operations = array();
+            foreach ($entityInfo as $entity => $bundleInfo)
+            {
+                $bundles = array_keys($bundleInfo);
+                $operations[] = array('openlayers_proximity_rebuild_index', array($entity, $bundles));
+            }
     $batch = array(
       'title' => t('Rebuild proximity index'),
-      'operations' => array(
-        array('openlayers_proximity_rebuild_index', array()),
-      ),
+              'operations' => $operations,
       'finished' => 'openlayers_proximity_rebuild_index_finished',
       'init_message' => t('The proximity index rebuilding process is beginning.'),
       'error_message' => t('The proximity index rebuilding process encountered an error.'),
     );
     batch_set($batch);
   }
+    }
   unset($form_state['values']['rebuild']);
 }
 
 /**
  * Batch API operation callback.
- * TODO Sort out geofields atached to any entity (as well as 'node')
  */
-function openlayers_proximity_rebuild_index(&$context) {
-
-  if (empty($context['sandbox'])) {
+function openlayers_proximity_rebuild_index($entity, $bundles, &$context)
+{
+    $entityInfo = entity_get_info($entity);
+    if (empty($context['sandbox']))
+    {
     $context['sandbox']['progress'] = 0;
-    $context['sandbox']['current_node'] = 0;
-    $context['sandbox']['types'] = module_invoke_all('openlayers_proximity_get_types');
-    $context['sandbox']['max'] = db_query("SELECT COUNT(DISTINCT nid) FROM {node} WHERE type IN (:types)", array(':types' => $context['sandbox']['types']))->fetchField();
+        $context['sandbox']['current_entity'] = $entityInfo['label'];
+        $context['sandbox']['current_id'] = 0;
+        $context['sandbox']['bundles'] = $bundles;
+        $context['sandbox']['max'] = 0;
+
+        $arguments = array();
+        $query = 'SELECT COUNT(DISTINCT ' . db_escape_field($entityInfo['entity keys']['id']) . ') FROM {' . db_escape_table($entityInfo['base table']) . '}';
+        if (isset($entityInfo['entity keys']['bundle']) && !empty($entityInfo['entity keys']['bundle']))
+        {
+            $query .= ' WHERE ' . db_escape_field($entityInfo['entity keys']['bundle']) . ' IN (:bundles)';
+            $arguments = array(':bundles' => $bundles);
+        }
+        $context['sandbox']['max'] = db_query($query, $arguments)->fetchField();
+    }
+    $arguments = array(':cnode' => $context['sandbox']['current_id']);
+    $query = 'SELECT ' . db_escape_field($entityInfo['entity keys']['id']) . ' AS id FROM {' . db_escape_table($entityInfo['base table']) . '} WHERE ' . db_escape_field($entityInfo['entity keys']['id']) . ' > :cnode';
+    if (isset($entityInfo['entity keys']['bundle']) && !empty($entityInfo['entity keys']['bundle']))
+    {
+      $arguments[':bundles'] = $bundles;
+      $query .= ' AND ' . db_escape_field($entityInfo['entity keys']['bundle']) . ' IN (:bundles)';
+    }
+    $query .= ' ORDER BY ' . db_escape_field($entityInfo['entity keys']['id']) . ' ASC';
+    $result = db_query_range($query, 0, OPENLAYERS_PROXIMITY_NODES_PER_BATCH, $arguments)->fetchAssoc();
+    if (is_array($result))
+    {
+        foreach ($result as $id)
+        {
+            $loadEntity = $entityInfo['load hook'];
+            $entityObject = $loadEntity($id);
+            $entityLabel = isset($entityObject->{$entityInfo['entity keys']['label']}) ? $entityObject->{$entityInfo['entity keys']['label']} : $entityInfo['label callback']($entityObject);
+            $index = openlayers_proximity_build_entity_index($entityObject, $entity, $entityInfo);
+            $context['results'][] = $entityObject->{$entityInfo['entity keys']['id']} . ' : ' . $entityLabel;
+            $context['sandbox']['current_node'] = $entityObject->{$entityInfo['entity keys']['id']};
+            $context['message'] = t('Rebuilding proximity index for !entity !id: <em>!title</em>. !count location(s) added.', array('!entity' => $entity, '!id' => $entityObject->{$entityInfo['entity keys']['id']}, '!title' => $entityLabel, '!count' => count($index)));
+        }
   }
-  $result = db_query_range("SELECT nid FROM {node} WHERE type IN (:types) AND nid > :cnode ORDER BY nid ASC", 0, OPENLAYERS_PROXIMITY_NODES_PER_BATCH, array(':types' => $context['sandbox']['types'], ':cnode' => $context['sandbox']['current_node']))->fetchAssoc();
-  foreach ($result as $nid) {
-    $node = node_load($nid);
-    $index = openlayers_proximity_build_node_index($node);
-    $context['results'][] = $node->nid . ' : ' . $node->title;
     $context['sandbox']['progress']++;
-    $context['sandbox']['current_node'] = $node->nid;
-    $context['message'] = t('Rebuilding proximity index for !type !nid: <em>!title</em>. !count location(s) added.', array('!type' => $node->type, '!nid' => $node->nid, '!title' => $node->title, '!count' => count($index)));
-  }
-  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    if ($context['sandbox']['progress'] != $context['sandbox']['max'])
+    {
     $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
   }
 }
 
 /**
- * Barch API finished callback.
+ * Batch API finished callback.
  */
 function openlayers_proximity_rebuild_index_finished($success, $results, $operations) {
   if ($success) {
-    $message = format_plural(count($results), 'Proximity index rebuilt for 1 node.', 'Proximity index rebuilt for @count nodes.');
+    $message = format_plural(count($results), 'Proximity index rebuilt for 1 entity.', 'Proximity index rebuilt for @count entities.');
     drupal_set_message($message);
   }
   else {
@@ -216,17 +288,21 @@ function openlayers_proximity_rebuild_index_finished($success, $results, $operat
 }
 
 /**
- * Build proximity index for a given node.
+ * Build proximity index for a given entity.
  */
-function openlayers_proximity_build_node_index($node) {
-
-  $index = module_invoke_all('build_proximity_index', $node);
-  drupal_alter('build_proximity_index', $node, $index);
-
+function openlayers_proximity_build_entity_index($entityObject, $entityName = 'node', $entityInfo = '') {
+    if ($entityInfo == '')
+    {
+        $entityInfo = entity_get_info($entityName);
+    }
+  $index = module_invoke_all('build_proximity_index', $entityObject, $entityName, $entityInfo);
+  drupal_alter('build_proximity_index', $entityObject, $entityName, $entityInfo);
   db_delete('openlayers_proximity')
-  ->condition('nid', $node->nid)
+  ->condition('entity', $entityName)
+  ->condition('id', $entityObject->{$entityInfo['entity keys']['id']})
   ->execute();
-  $location->nid = $node->nid;
+  $location->entity = $entityName;
+  $location->id = $entityObject->{$entityInfo['entity keys']['id']};
   foreach ($index as $item) {
     $location->lat = $item[0];
     $location->lon = $item[1];
@@ -238,10 +314,14 @@ function openlayers_proximity_build_node_index($node) {
 /**
  * Implements hook_build_proximity_index().
  */
-function openlayers_proximity_build_proximity_index($node) {
+function openlayers_proximity_build_proximity_index($entityObject, $entityName = 'node', $entityInfo = '') {
+    if ($entityInfo == '')
+    {
+        $entityInfo = entity_get_info($entityName);
+    }
   $index = array();
-  foreach (openlayers_proximity_get_wkt_fields($node) as $name => $field) {
-    $item = $node->{$name}['und'][0];
+  foreach (openlayers_proximity_get_wkt_fields($entityObject, $entityName, $entityInfo) as $name => $field) {
+    $item = $entityObject->{$name}['und'][0];
     if (!module_invoke($field['module'], 'field_is_empty', $item, $field)) {
       foreach (module_implements('parse_wkt') as $module) {
         $index += module_invoke($module, 'parse_wkt', $item['wkt']);
@@ -257,20 +337,31 @@ function openlayers_proximity_build_proximity_index($node) {
  *
  * @param $type Content type
  */
-function openlayers_proximity_get_wkt_fields($node) {
+function openlayers_proximity_get_wkt_fields ($entityObject, $entityName = 'node', $entityInfo = '') {
+    if ($entityInfo == '')
+    {
+        $entityInfo = entity_get_info($entityName);
+    }
   static $fields = array();
-  $type = $node->type;
+  if (empty($entityInfo['entity keys']['bundle']))
+  {
+      $type = $entityName;
+  }
+  else
+  {
+      $type = $entityObject->{$entityInfo['entity keys']['bundle']};
+  }
 
-  if (!isset($fields[$type])) {
+  if (!isset($fields[$entityName][$type])) {
     $everything = field_info_instances();
     foreach ($everything as $entity => $bundles) {
       foreach ($bundles as $bundle => $bundlefields) {
         foreach ($bundlefields as $key => $field) {
-          $real_field = field_info_field($field['field_name']);    
+          $real_field = field_info_field($field['field_name']);
           if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
-	        foreach ($real_field['bundles'] as $ent){
-		      if (in_array($type, $ent)) {
-	            $fields[$type][$key] = $real_field;
+	        foreach ($real_field['bundles'] as $bndl){
+		      if (in_array($type, $bndl)) {
+	            $fields[$entityName][$type][$key] = $real_field;
 		      }
 		    }
           }
@@ -278,8 +369,8 @@ function openlayers_proximity_get_wkt_fields($node) {
       }
     }
   }
-  if (isset($fields[$type])) {
-	  return $fields[$type] ;
+  if (isset($fields[$entityName][$type])) {
+	  return $fields[$entityName][$type];
   } else {
 	  return array();
   }
@@ -292,11 +383,27 @@ function openlayers_proximity_openlayers_proximity_get_types() {
   $types = array();
   $fields = field_info_instances();
   foreach ($fields as $entity => $bundles) {
-    foreach ($bundles as $bundle => $bundlefields) {    
+    foreach ($bundles as $bundle => $bundlefields) {
       foreach ($bundlefields as $field) {
-        $real_field = field_info_field($field['field_name']);    
+        $real_field = field_info_field($field['field_name']);
         if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
           $types[$bundle] = $bundle;
+        }
+      }
+    }
+  }
+  return $types;
+}
+
+function openlayers_proximity_get_entity_info() {
+  $types = array();
+  $fields = field_info_instances();
+  foreach ($fields as $entity => $bundles) {
+    foreach ($bundles as $bundle => $bundlefields) {
+      foreach ($bundlefields as $field) {
+        $real_field = field_info_field($field['field_name']);
+        if ($real_field['type'] == OPENLAYERS_PROXIMITY_FIELD_TYPE) {
+          $types[$entity][$bundle] = $field['field_name'];
         }
       }
     }
