@@ -498,7 +498,7 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
       }
       else
       {
-          $results = db_query('SELECT n.' . db_escape_field($base_field) . ' FROM {openlayers_proximity} op LEFT JOIN {' . db_escape_table($base_table) . '} n ON n.' . db_escape_field($base_field) . ' = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.$base_field ASC', array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
+          $results = db_query('SELECT n.' . db_escape_field($base_field) . ' FROM {openlayers_proximity} op LEFT JOIN {' . db_escape_table($base_table) . '} n ON n.' . db_escape_field($base_field) . ' = op.id WHERE n.status = :nstatus AND op.entity = :entity ORDER BY n.' . db_escape_field($base_field) . ' ASC', array(':nstatus' => 1, ':entity' => $this->entityName))->fetchAllAssoc($base_field);
       }
       foreach ($results as $row) {
         if (!empty($base_label))
