@@ -519,11 +519,13 @@ class openlayers_proximity_handler_filter extends views_handler_filter_numeric {
   function get_argument_options()
   {
       $options = array();
-      $path = $this->view->display[$this->view->current_display]->handler->options['path'];
-      $argCount = substr_count($path, '%');
-      for ($i = 0; $i < $argCount; $i++)
-      {
+      if (isset($this->view->display[$this->view->current_display]->handler->options['path'])) {
+        $path = $this->view->display[$this->view->current_display]->handler->options['path'];
+        $argCount = substr_count($path, '%');
+        for ($i = 0; $i < $argCount; $i++)
+        {
           $options[$i] = t('Argument @id', array('@id' => $i));
+        }
       }
       return $options;
   }
